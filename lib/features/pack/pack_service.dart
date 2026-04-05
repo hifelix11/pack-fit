@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../shared/constants.dart';
+import '../shared/models/calendar_data.dart';
 import '../shared/models/check_in.dart';
 import '../shared/models/goal.dart';
 import '../shared/models/pack.dart';
@@ -197,6 +198,96 @@ class PackService {
     final result =
         await _client.rpc('get_pack_streak', params: {'p_pack_id': packId});
     return (result as int?) ?? 0;
+  }
+
+  // ── Streak with best (calls enhanced DB function) ──────
+  Future<StreakData> getStreakWithBest(String packId) async {
+    try {
+      final result = await _client
+          .rpc('get_pack_streak_with_best', params: {'p_pack_id': packId});
+
+      final row = (result as List).first;
+      final currentStreak = row['current_streak'] as int? ?? 0;
+      final bestStreak = row['best_streak'] as int? ?? 0;
+
+      // Also get today's completion status
+      final goal = await activeGoal(packId);
+      int todayCheckins = 0;
+      int members = 0;
+      if (goal != null) {
+        final today = DateTime.now().toIso8601String().substring(0, 10);
+        final checkIns = await _client
+            .from('check_ins')
+            .select('id')
+            .eq('goal_id', goal.id)
+            .eq('checked_date', today);
+        todayCheckins = (checkIns as List).length;
+        members = await memberCount(packId);
+      }
+
+      return StreakData(
+        currentStreak: currentStreak,
+        bestStreak: bestStreak,
+        todayComplete: members > 0 && todayCheckins >= members,
+        todayCheckIns: todayCheckins,
+        memberCount: members,
+      );
+    } catch (_) {
+      // Fallback if the new function doesn't exist yet
+      final streak = await getStreak(packId);
+      return StreakData(
+        currentStreak: streak,
+        bestStreak: streak,
+        todayComplete: false,
+        todayCheckIns: 0,
+        memberCount: 0,
+      );
+    }
+  }
+
+  // ── Month check-ins for calendar ───────────────────────
+  Future<Map<String, List<CheckIn>>> fetchMonthCheckIns({
+    required String goalId,
+    required int year,
+    required int month,
+  }) async {
+    final startDate = '$year-${month.toString().padLeft(2, '0')}-01';
+    final endDate = month == 12
+        ? '${year + 1}-01-01'
+        : '$year-${(month + 1).toString().padLeft(2, '0')}-01';
+
+    final data = await _client
+        .from('check_ins')
+        .select()
+        .eq('goal_id', goalId)
+        .gte('checked_date', startDate)
+        .lt('checked_date', endDate)
+        .order('checked_at', ascending: true);
+
+    final Map<String, List<CheckIn>> grouped = {};
+    for (final row in data as List) {
+      final date = row['checked_date'] as String;
+      grouped.putIfAbsent(date, () => []).add(CheckIn.fromMap(row));
+    }
+    return grouped;
+  }
+
+  // ── Fetch members for day detail (with profiles) ───────
+  Future<List<({String userId, String displayName, String? avatarUrl})>>
+      fetchPackMembersForDetail(String packId) async {
+    final rows = await _client
+        .from('pack_members')
+        .select('user_id, profiles:user_id(display_name, avatar_url)')
+        .eq('pack_id', packId);
+
+    return (rows as List).map((r) {
+      final profile = r['profiles'] as Map<String, dynamic>?;
+      return (
+        userId: r['user_id'] as String,
+        displayName: profile?['display_name'] as String? ?? 'Unknown',
+        avatarUrl: profile?['avatar_url'] as String?,
+      );
+    }).toList();
   }
 
   // ── Admin: remove member ───────────────────────────────

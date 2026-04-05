@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../auth/auth_provider.dart';
-import '../shared/models/check_in.dart';
 import '../shared/platform_utils.dart';
 import '../shared/theme.dart';
 import '../timer/timer_provider.dart';
@@ -48,6 +45,12 @@ class _PackDetailScreenState extends ConsumerState<PackDetailScreen> {
               if (goal != null) {
                 ref.invalidate(todayCheckInsProvider(goal.id));
                 ref.invalidate(packStreakProvider(widget.packId));
+                ref.invalidate(packStreakWithBestProvider(widget.packId));
+                // Invalidate calendar for current month
+                final now = DateTime.now();
+                final calKey =
+                    '${widget.packId}|${goal.id}|${now.year}|${now.month}';
+                ref.invalidate(packCalendarProvider(calKey));
               }
             });
           },
@@ -66,6 +69,11 @@ class _PackDetailScreenState extends ConsumerState<PackDetailScreen> {
       await ref.read(packServiceProvider).checkInToday(goalId);
       ref.invalidate(todayCheckInsProvider(goalId));
       ref.invalidate(packStreakProvider(widget.packId));
+      ref.invalidate(packStreakWithBestProvider(widget.packId));
+      // Invalidate calendar for current month
+      final now = DateTime.now();
+      final calKey = '${widget.packId}|$goalId|${now.year}|${now.month}';
+      ref.invalidate(packCalendarProvider(calKey));
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -79,6 +87,8 @@ class _PackDetailScreenState extends ConsumerState<PackDetailScreen> {
     final user = ref.watch(currentUserProvider);
     final membersAsync = ref.watch(packMembersProvider(widget.packId));
     final goalAsync = ref.watch(activeGoalProvider(widget.packId));
+    final streakWithBestAsync =
+        ref.watch(packStreakWithBestProvider(widget.packId));
     final streakAsync = ref.watch(packStreakProvider(widget.packId));
     final activeTimerAsync =
         ref.watch(activeTimerSessionProvider(widget.packId));
@@ -117,6 +127,7 @@ class _PackDetailScreenState extends ConsumerState<PackDetailScreen> {
               ref.invalidate(packMembersProvider(widget.packId));
               ref.invalidate(activeGoalProvider(widget.packId));
               ref.invalidate(packStreakProvider(widget.packId));
+              ref.invalidate(packStreakWithBestProvider(widget.packId));
               ref.invalidate(activeTimerSessionProvider(widget.packId));
             },
             child: ListView(
@@ -193,8 +204,8 @@ class _PackDetailScreenState extends ConsumerState<PackDetailScreen> {
                 const SizedBox(height: 16),
 
                 // ── Streak ───────────────────────────
-                streakAsync.when(
-                  data: (streak) => Center(child: StreakDisplay(streak: streak)),
+                streakWithBestAsync.when(
+                  data: (streakData) => StreakDisplay(streakData: streakData),
                   loading: () => const SizedBox.shrink(),
                   error: (_, __) => const SizedBox.shrink(),
                 ),
@@ -273,12 +284,15 @@ class _PackDetailScreenState extends ConsumerState<PackDetailScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                // ── History ──────────────────────────
+                // ── History Calendar ─────────────────
                 goalAsync.when(
                   data: (goal) {
                     if (goal == null) return const SizedBox.shrink();
-                    return _HistorySection(
-                        goalId: goal.id, packId: widget.packId);
+                    return HistoryCalendar(
+                      packId: widget.packId,
+                      goalId: goal.id,
+                      packCreatedAt: pack?.createdAt ?? goal.createdAt,
+                    );
                   },
                   loading: () => const SizedBox.shrink(),
                   error: (_, __) => const SizedBox.shrink(),
@@ -387,34 +401,6 @@ class _GoalSection extends ConsumerWidget {
       },
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Text('Error: $e'),
-    );
-  }
-}
-
-class _HistorySection extends ConsumerWidget {
-  final String goalId;
-  final String packId;
-
-  const _HistorySection({required this.goalId, required this.packId});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final historyAsync = ref.watch(checkInHistoryProvider(goalId));
-    final membersAsync = ref.watch(packMembersProvider(packId));
-
-    return historyAsync.when(
-      data: (checkIns) {
-        return membersAsync.when(
-          data: (members) => HistoryCalendar(
-            checkIns: checkIns,
-            memberCount: members.length,
-          ),
-          loading: () => const SizedBox.shrink(),
-          error: (_, __) => const SizedBox.shrink(),
-        );
-      },
-      loading: () => const SizedBox.shrink(),
-      error: (_, __) => const SizedBox.shrink(),
     );
   }
 }
