@@ -11,7 +11,6 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../shared/models/profile.dart';
 import '../shared/theme.dart';
 import 'timer_provider.dart';
-import 'timer_service.dart';
 import 'timer_session_model.dart';
 import 'widgets/led_display.dart';
 import 'widgets/participant_avatars.dart';

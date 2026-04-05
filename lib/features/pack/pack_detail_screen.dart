@@ -8,7 +8,6 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../auth/auth_provider.dart';
-import '../shared/models/check_in.dart';
 import '../shared/platform_utils.dart';
 import '../shared/theme.dart';
 import '../timer/timer_provider.dart';
