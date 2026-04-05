@@ -4,6 +4,7 @@ class Pack {
   final String inviteCode;
   final String createdBy;
   final DateTime createdAt;
+  final int bestStreak;
 
   const Pack({
     required this.id,
@@ -11,6 +12,7 @@ class Pack {
     required this.inviteCode,
     required this.createdBy,
     required this.createdAt,
+    this.bestStreak = 0,
   });
 
   factory Pack.fromMap(Map<String, dynamic> map) {
@@ -20,6 +22,7 @@ class Pack {
       inviteCode: map['invite_code'] as String,
       createdBy: map['created_by'] as String,
       createdAt: DateTime.parse(map['created_at'] as String),
+      bestStreak: map['best_streak'] as int? ?? 0,
     );
   }
 }
